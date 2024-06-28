@@ -1,10 +1,21 @@
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom'
+
+import Front from '../src/UserAuth/Front.js'
+import Discuss from '../src/Discuss/message.js'
 
 import './App.css';
 
 function App() {
   return (
     <>
-<div>Hello Hai</div>     
+      <Router>
+        <Routes>
+        <Route path='/' element={<Front/>} />
+        <Route path='/discuss' element={<Discuss/>} />
+          
+        </Routes>
+      </Router>
+
     </>
   );
 }

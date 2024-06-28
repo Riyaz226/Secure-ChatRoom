@@ -1,0 +1,193 @@
+import React, { useState } from 'react';
+import axios from 'axios';
+import { Grid, Paper, Typography, TextField, Button, Radio, RadioGroup, FormControlLabel, FormControl, FormLabel, Link } from '@mui/material';
+
+const Signup = () => {
+    const paperStyle = { padding: 20, width: 300, margin: "0 auto" };
+    const marginTop = { marginTop: 5 };
+
+    const [inputs, setInputs] = useState({
+        fullName: '',
+        phoneNumber: '',
+        password: '',
+        confirmPassword: '',
+        gender: '',
+    });
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setInputs({
+            ...inputs,
+            [name]: value,
+        });
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (inputs.password !== inputs.confirmPassword) {
+            alert('Passwords do not match');
+            return;
+        }
+        try {
+            const result = await axios.post("http://localhost:5000/api/auth/signup", inputs);
+            alert('Signup successful');
+        } catch (error) {
+            console.error(error);
+            alert(error.response?.data?.error || 'An error occurred');
+        }
+    };
+
+    return (
+        <Grid className='col'>
+            <Paper style={paperStyle} id="paper">
+                <Grid align='center'>
+                    <Typography variant='caption' gutterBottom>
+                        Please fill this form to create an account!
+                    </Typography>
+                </Grid>
+                <form onSubmit={handleSubmit}>
+                    <TextField
+                        fullWidth
+                        label='Full Name'
+                        placeholder="Enter your name"
+                        name="fullName"
+                        value={inputs.fullName}
+                        onChange={handleChange}
+                        style={marginTop}
+                    />
+                    <TextField
+                        fullWidth
+                        label='Phone'
+                        placeholder="Enter your phone number"
+                        name="phoneNumber"
+                        value={inputs.phoneNumber}
+                        onChange={handleChange}
+                        style={marginTop}
+                    />
+                    <FormControl component="fieldset" style={marginTop}>
+                        <FormLabel component="legend">Gender</FormLabel>
+                        <RadioGroup
+                            aria-label="gender"
+                            name="gender"
+                            value={inputs.gender}
+                            onChange={handleChange}
+                            style={{ display: 'initial' }}
+                        >
+                            <FormControlLabel value="female" control={<Radio />} label="Female" />
+                            <FormControlLabel value="male" control={<Radio />} label="Male" />
+                        </RadioGroup>
+                    </FormControl>
+                    <TextField
+                        fullWidth
+                        label='Password'
+                        placeholder="Enter your password"
+                        type='password'
+                        name="password"
+                        value={inputs.password}
+                        onChange={handleChange}
+                        style={marginTop}
+                    />
+                    <TextField
+                        fullWidth
+                        label='Confirm Password'
+                        placeholder="Confirm your password"
+                        type='password'
+                        name="confirmPassword"
+                        value={inputs.confirmPassword}
+                        onChange={handleChange}
+                        style={marginTop}
+                    />
+                     <TextField
+                        fullWidth required
+                        type='file'
+                        style={marginTop}
+                    />
+                    <p>Already have an account? <Link href="#">Sign In</Link></p>
+                    <Button type='submit' variant='contained' color='primary' fullWidth>
+                        Sign up
+                    </Button>
+                </form>
+            </Paper>
+        </Grid>
+    );
+};
+
+export default Signup;
+import bcrypt from "bcryptjs";
+import User from "../modules/user_module.js";
+import generateTokenAndSetCookie from "../generateToken.js";
+
+export const signup = async (req, res) => {
+    try {
+        const { fullName, phoneNumber, password, confirmPassword, gender } = req.body;
+
+        if (password !== confirmPassword) {
+            return res.status(400).json({ error: "Passwords don't match" });
+        }
+
+        const user = await User.findOne({ fullName });
+
+        if (user) {
+            return res.status(400).json({ error: "Username already exists" });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10); // Generate hashed password
+
+        // Assuming profilePic is handled by multer middleware
+        const newUser = new User({
+            fullName,
+            phoneNumber,
+            password: hashedPassword,
+            gender,
+            profilePic: req.file.path, // Store the path to the uploaded file in the database
+        });
+
+        await newUser.save();
+        generateTokenAndSetCookie(newUser._id, res);
+
+        res.status(201).json({
+            _id: newUser._id,
+            fullName: newUser.fullName,
+            phoneNumber: newUser.phoneNumber,
+            profilePic: newUser.profilePic,
+        });
+    } catch (error) {
+        console.error("Error in signup controller", error.message);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+
+export const login = async (req, res) => {
+	try {
+		const { username, password } = req.body;
+		const user = await User.findOne({ username });
+		const isPasswordCorrect = await bcrypt.compare(password, user?.password || "");
+
+		if (!user || !isPasswordCorrect) {
+			return res.status(400).json({ error: "Invalid username or password" });
+		}
+
+		generateTokenAndSetCookie(user._id, res);
+
+		res.status(200).json({
+			_id: user._id,
+			fullName: user.fullName,
+			username: user.username,
+			profilePic: user.profilePic,
+		});
+	} catch (error) {
+		console.log("Error in login controller", error.message);
+		res.status(500).json({ error: "Internal Server Error" });
+	}
+};
+
+export const logout = (req, res) => {
+	try {
+		res.cookie("jwt", "", { maxAge: 0 });
+		res.status(200).json({ message: "Logged out successfully" });
+	} catch (error) {
+		console.log("Error in logout controller", error.message);
+		res.status(500).json({ error: "Internal Server Error" });
+	}
+};
